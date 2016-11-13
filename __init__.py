@@ -18,7 +18,7 @@ from bpy_extras.io_utils import ImportHelper
 
 import xml.etree.cElementTree as etree
 
-import sys, os
+import os
 from transverse_mercator import TransverseMercator
 
 class ImportGpx(bpy.types.Operator, ImportHelper):
