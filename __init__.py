@@ -12,13 +12,20 @@ bl_info = {
     "category": "Import-Export",
 }
 
+import os, sys
+
+def _checkPath():
+    path = os.path.dirname(__file__)
+    if path not in sys.path:
+        sys.path.append(path)
+_checkPath()
+
 import bpy, bmesh
 # ImportHelper is a helper class, defines filename and invoke() function which calls the file selector
 from bpy_extras.io_utils import ImportHelper
 
 import xml.etree.cElementTree as etree
 
-import os
 from transverse_mercator import TransverseMercator
 
 class ImportGpx(bpy.types.Operator, ImportHelper):
