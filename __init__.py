@@ -2,7 +2,7 @@ bl_info = {
     "name": "Import GPX (.gpx)",
     "author": "Vladimir Elistratov <vladimir.elistratov@gmail.com>",
     "version": (1, 0, 1),
-    "blender": (2, 7, 8),
+    "blender": (2, 80, 0),
     "location": "File > Import > GPX (.gpx)",
     "description": "Import a file in the GPX format (.gpx)",
     "warning": "",
@@ -37,18 +37,18 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
     # ImportHelper mixin class uses this
     filename_ext = ".gpx"
 
-    filter_glob = bpy.props.StringProperty(
+    filter_glob : bpy.props.StringProperty(
         default="*.gpx",
         options={"HIDDEN"},
     )
 
-    ignoreGeoreferencing = bpy.props.BoolProperty(
+    ignoreGeoreferencing : bpy.props.BoolProperty(
         name="Ignore existing georeferencing",
         description="Ignore existing georeferencing and make a new one",
         default=False,
     )
     
-    useElevation = bpy.props.BoolProperty(
+    useElevation : bpy.props.BoolProperty(
         name="Use elevation for z-coordinate",
         description="Use elevation from the track for z-coordinate if checked or make the track flat otherwise",
         default=True,
@@ -74,19 +74,19 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
         self.bm.to_mesh(mesh)
         
         obj = bpy.data.objects.new(name, mesh)
-        bpy.context.scene.objects.link(obj)
+        bpy.context.scene.collection.objects.link(obj)
         
         # remove double vertices
-        context.scene.objects.active = obj
+        bpy.context.view_layer.objects.active = obj
         bpy.ops.object.mode_set(mode="EDIT")
         bpy.ops.mesh.select_all(action="SELECT")
         bpy.ops.mesh.remove_doubles()
         bpy.ops.mesh.select_all(action="DESELECT")
         bpy.ops.object.mode_set(mode="OBJECT")
         
-        obj.select = True
+        obj.select_set(state = True)
         
-        bpy.context.scene.update()
+        bpy.context.view_layer.update()
         
         return {"FINISHED"}
 
@@ -156,8 +156,8 @@ def menu_func_import(self, context):
 
 def register():
     bpy.utils.register_class(ImportGpx)
-    bpy.types.INFO_MT_file_import.append(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
 
 def unregister():
     bpy.utils.unregister_class(ImportGpx)
-    bpy.types.INFO_MT_file_import.remove(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
