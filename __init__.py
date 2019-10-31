@@ -1,8 +1,8 @@
 bl_info = {
     "name": "Import GPX (.gpx)",
-    "author": "Vladimir Elistratov <vladimir.elistratov@gmail.com>",
-    "version": (1, 0, 1),
-    "blender": (2, 7, 8),
+    "author": "Vladimir Elistratov <prokitektura+support@gmail.com>",
+    "version": (1, 0, 2),
+    "blender": (2, 80, 0),
     "location": "File > Import > GPX (.gpx)",
     "description": "Import a file in the GPX format (.gpx)",
     "warning": "",
@@ -13,20 +13,17 @@ bl_info = {
 }
 
 import os, sys
-
-def _checkPath():
-    path = os.path.dirname(__file__)
-    if path not in sys.path:
-        sys.path.append(path)
-_checkPath()
-
 import bpy, bmesh
 # ImportHelper is a helper class, defines filename and invoke() function which calls the file selector
 from bpy_extras.io_utils import ImportHelper
 
 import xml.etree.cElementTree as etree
 
-from transverse_mercator import TransverseMercator
+from .transverse_mercator import TransverseMercator
+
+
+_isBlender280 = bpy.app.version[1] >= 80
+
 
 class ImportGpx(bpy.types.Operator, ImportHelper):
     """Import a file in the GPX format (.gpx)"""
@@ -58,8 +55,12 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
         # setting active object if there is no active object
         if context.mode != "OBJECT":
             # if there is no object in the scene, only "OBJECT" mode is provided
-            if not context.scene.objects.active:
-                context.scene.objects.active = context.scene.objects[0]
+            if _isBlender280:
+                if not context.view_layer.objects.active:
+                    context.view_layer.objects.active = context.scene.collection.objects[0]
+            else:
+                if not context.scene.objects.active:
+                    context.scene.objects.active = context.scene.objects[0]
             bpy.ops.object.mode_set(mode="OBJECT")
         
         bpy.ops.object.select_all(action="DESELECT")
@@ -74,19 +75,27 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
         self.bm.to_mesh(mesh)
         
         obj = bpy.data.objects.new(name, mesh)
-        bpy.context.scene.objects.link(obj)
+        if _isBlender280:
+            bpy.context.scene.collection.objects.link(obj)
+        else:
+            bpy.context.scene.objects.link(obj)
         
         # remove double vertices
-        context.scene.objects.active = obj
+        if _isBlender280:
+            context.view_layer.objects.active = obj
+        else:
+            context.scene.objects.active = obj
         bpy.ops.object.mode_set(mode="EDIT")
         bpy.ops.mesh.select_all(action="SELECT")
         bpy.ops.mesh.remove_doubles()
         bpy.ops.mesh.select_all(action="DESELECT")
         bpy.ops.object.mode_set(mode="OBJECT")
         
-        obj.select = True
-        
-        bpy.context.scene.update()
+        if _isBlender280:
+            obj.select_set(True)
+        else:
+            obj.select = True
+            bpy.context.scene.update()
         
         return {"FINISHED"}
 
@@ -156,8 +165,14 @@ def menu_func_import(self, context):
 
 def register():
     bpy.utils.register_class(ImportGpx)
-    bpy.types.INFO_MT_file_import.append(menu_func_import)
+    if _isBlender280:
+        bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
+    else:
+        bpy.types.INFO_MT_file_import.append(menu_func_import)
 
 def unregister():
     bpy.utils.unregister_class(ImportGpx)
-    bpy.types.INFO_MT_file_import.remove(menu_func_import)
+    if _isBlender280:
+        bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
+    else:
+        bpy.types.INFO_MT_file_import.remove(menu_func_import)
