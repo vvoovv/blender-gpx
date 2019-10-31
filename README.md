@@ -2,7 +2,6 @@
 Importer of GPS track files (.gpx) for Blender
 
 * [Documentation](https://github.com/vvoovv/blender-gpx/wiki/Documentation)
-* blenderartists.org: [thread](https://blenderartists.org/forum/showthread.php?363717-Import-GPX-track-(-gpx))
 * twitter: [@prokitektura](https://twitter.com/prokitektura)
 
 ## Donations
