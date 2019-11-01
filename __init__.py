@@ -19,8 +19,6 @@ from bpy_extras.io_utils import ImportHelper
 
 import xml.etree.cElementTree as etree
 
-from .transverse_mercator import TransverseMercator
-
 
 _isBlender280 = bpy.app.version[1] >= 80
 
@@ -50,6 +48,18 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
         description="Use elevation from the track for z-coordinate if checked or make the track flat otherwise",
         default=True,
     )
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "useElevation")
+        layout.prop(self, "ignoreGeoreferencing")
+        if self.bpyproj:
+            self.bpyproj.draw(context, layout)
+    
+    def invoke(self, context, event):
+        # check if <bpyproj> is activated and is available in sys.modules
+        self.bpyproj = "bpyproj" in (context.preferences.addons if _isBlender280 else context.user_preferences.addons) and sys.modules.get("bpyproj")
+        return super().invoke(context, event)
 
     def execute(self, context):
         # setting active object if there is no active object
@@ -100,8 +110,6 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
         return {"FINISHED"}
 
     def read_gpx_file(self, context):
-        scene = context.scene
-        
         # a list of track segments (trkseg)
         segments = []
 
@@ -138,15 +146,7 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
                                 segment.append(point)
                         segments.append(segment)
         
-        if "lat" in scene and "lon" in scene and not self.ignoreGeoreferencing:
-            lat = scene["lat"]
-            lon = scene["lon"]
-        else:
-            lat = (minLat + maxLat)/2
-            lon = (minLon + maxLon)/2
-            scene["lat"] = lat
-            scene["lon"] = lon
-        projection = TransverseMercator(lat=lat, lon=lon)
+        projection = self.getProjection(context, lat = (minLat + maxLat)/2, lon = (minLon + maxLon)/2)
         
         # create vertices and edges for the track segments
         for segment in segments:
@@ -157,6 +157,25 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
                 if prevVertex:
                     self.bm.edges.new([prevVertex, v])
                 prevVertex = v
+    
+    def getProjection(self, context, lat, lon):
+        # get the coordinates of the center of the Blender system of reference
+        scene = context.scene
+        if "lat" in scene and "lon" in scene and not self.ignoreGeoreferencing:
+            lat = scene["lat"]
+            lon = scene["lon"]
+        else:
+            scene["lat"] = lat
+            scene["lon"] = lon
+        
+        projection = None
+        if self.bpyproj:
+            projection = self.bpyproj.getProjection(lat, lon)
+        if not projection:
+            from .transverse_mercator import TransverseMercator
+            # fall back to the Transverse Mercator
+            projection = TransverseMercator(lat=lat, lon=lon)
+        return projection
 
 
 # Only needed if you want to add into a dynamic menu
