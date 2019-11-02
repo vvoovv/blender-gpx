@@ -21,6 +21,15 @@ import xml.etree.cElementTree as etree
 
 
 _isBlender280 = bpy.app.version[1] >= 80
+_curveBevelObjectName = "gpx_bevel"
+
+_bevelCurves = {
+    "line": ( ( (-1., 0., 0.), (1., 0., 0.) ), False ), # False means: the curve isn't closed
+    "square": (
+        ( (-1., 0., 0.), (1., 0., 0.), (1., 2., 0.), (-1., 2., 0.) ),
+        True # True means: the curve is closed
+    )
+}
 
 
 class ImportGpx(bpy.types.Operator, ImportHelper):
@@ -47,6 +56,16 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
         name="Use elevation for z-coordinate",
         description="Use elevation from the track for z-coordinate if checked or make the track flat otherwise",
         default=True,
+    )
+    
+    importType = bpy.props.EnumProperty(
+        name = "Import as curve or mesh",
+        items = (
+            ("curve", "curve", "Blender curve"),
+            ("mesh", "mesh", "Blender mesh")
+        ),
+        description = "Import as Blender curve or mesh",
+        default = "curve"
     )
     
     def draw(self, context):
@@ -77,14 +96,11 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
         
         name = os.path.basename(self.filepath)
         
-        self.bm = bmesh.new()
+        if self.importType == "curve":
+            obj = self.makeCurve(context, name)
+        else:
+            obj = self.makeMesh(context, name)
         
-        self.read_gpx_file(context)
-        
-        mesh = bpy.data.meshes.new(name)
-        self.bm.to_mesh(mesh)
-        
-        obj = bpy.data.objects.new(name, mesh)
         if _isBlender280:
             bpy.context.scene.collection.objects.link(obj)
         else:
@@ -95,11 +111,6 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
             context.view_layer.objects.active = obj
         else:
             context.scene.objects.active = obj
-        bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.mesh.select_all(action="SELECT")
-        bpy.ops.mesh.remove_doubles()
-        bpy.ops.mesh.select_all(action="DESELECT")
-        bpy.ops.object.mode_set(mode="OBJECT")
         
         if _isBlender280:
             obj.select_set(True)
@@ -148,6 +159,13 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
         
         projection = self.getProjection(context, lat = (minLat + maxLat)/2, lon = (minLon + maxLon)/2)
         
+        return segments, projection
+    
+    def makeMesh(self, context, name):
+        self.bm = bmesh.new()
+        
+        segments, projection = self.read_gpx_file(context)
+        
         # create vertices and edges for the track segments
         for segment in segments:
             prevVertex = None
@@ -157,6 +175,40 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
                 if prevVertex:
                     self.bm.edges.new([prevVertex, v])
                 prevVertex = v
+        
+        # finalize
+        mesh = bpy.data.meshes.new(name)
+        self.bm.to_mesh(mesh)
+        # cleanup
+        self.bm.free()
+        self.bm = None
+        
+        return bpy.data.objects.new(name, mesh)
+    
+    def makeCurve(self, context, name):
+        curve = bpy.data.curves.new(name, 'CURVE')
+        curve.dimensions = '3D'
+        curve.twist_mode = 'Z_UP'
+        self.curve = curve
+        
+        segments, projection = self.read_gpx_file(context)
+        
+        for segment in segments:
+            self.createSpline()
+            for i, point in enumerate(segment):
+                if i:
+                    self.spline.points.add(1)
+                v = projection.fromGeographic(point[0], point[1])
+                self.setSplinePoint((v[0], v[1], point[2] if self.useElevation and len(point)==3 else 0))
+        
+        # set bevel object
+        self.setCurveBevelObject("square")
+        
+        # cleanup
+        self.curve = None
+        self.spline = None
+        
+        return bpy.data.objects.new(name, curve)
     
     def getProjection(self, context, lat, lon):
         # get the coordinates of the center of the Blender system of reference
@@ -176,6 +228,47 @@ class ImportGpx(bpy.types.Operator, ImportHelper):
             # fall back to the Transverse Mercator
             projection = TransverseMercator(lat=lat, lon=lon)
         return projection
+    
+    def createSpline(self, curve=None):
+        if not curve:
+            curve = self.curve
+        self.spline = curve.splines.new('POLY')
+        self.pointIndex = 0
+
+    def setSplinePoint(self, point):
+        self.spline.points[self.pointIndex].co = (point[0], point[1], point[2], 1.)
+        self.pointIndex += 1
+    
+    def setCurveBevelObject(self, bevelCurveId):
+        bevelObj = bpy.data.objects.get(_curveBevelObjectName)
+        if not (bevelObj and bevelObj.type == 'CURVE'):
+            # create a Blender object of the type 'CURVE' to surve as a bevel object
+            bevelCurve = bpy.data.curves.new(_curveBevelObjectName, 'CURVE')
+            bevelCurveData, isBevelCurveClosed = _bevelCurves[bevelCurveId]
+            
+            self.createSpline(bevelCurve)
+            self.spline.points.add( len(bevelCurveData)-1 )
+            
+            for point in bevelCurveData:
+                self.setSplinePoint(point)
+            
+            if isBevelCurveClosed:
+                self.spline.use_cyclic_u = True
+            
+            bevelObj = bpy.data.objects.new(_curveBevelObjectName, bevelCurve)
+            
+            if _isBlender280:
+                bevelObj.hide_viewport = True
+                bevelObj.hide_select = True
+                bevelObj.hide_render = True
+                bpy.context.scene.collection.objects.link(bevelObj)
+            else:
+                bevelObj.hide = True
+                bevelObj.hide_select = True
+                bevelObj.hide_render = True
+                bpy.context.scene.objects.link(bevelObj)
+        
+        self.curve.bevel_object = bevelObj
 
 
 # Only needed if you want to add into a dynamic menu
