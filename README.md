@@ -1,3 +1,7 @@
+# Important!
+
+GPX import to Blender is now a part of the blender-osm addon. Get it for free at https://gumroad.com/l/blender-osm. The source code is located [here](https://github.com/vvoovv/blender-osm/tree/release).
+
 # blender-gpx
 Importer of GPS track files (.gpx) for Blender
 
